@@ -184,6 +184,11 @@ int main(int argc, char *argv[])
         word[j] = '\0';
         wordcount++;
 
+        // Primul meu bug cu Fork, CRAZZZYYYYY
+        // ramane " " in buffer de pe linia 172 si pentru copil aparent...
+        fflush(f_main_out);
+        fflush(f_key_ptr);
+
         if (mode == 1)
             StartChildEncryptor(word, f_main_out, f_key_ptr);
         else
