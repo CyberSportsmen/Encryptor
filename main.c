@@ -86,6 +86,64 @@ void StartChildEncryptor(const char *word, FILE *f_out, FILE *f_key)
     }
 }
 
+void StartChildDecryptor(const char *word, int wordcount, FILE *f_out, FILE *f_key)
+{
+    int len = strlen(word);
+    pid_t pid = fork();
+
+    if (pid < 0)
+    {
+        perror("Fork failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (pid == 0) // Child process
+    {
+        int *p = malloc(len * sizeof(int));
+        char *decrypted = malloc((len + 1) * sizeof(char));
+
+        // Reset file pointer to the start
+        rewind(f_key);
+
+        // skip (wordcount - 1) lines to reach current key
+        char line[1024];
+        for (int k = 0; k < wordcount - 1; k++)
+        {
+            if (!fgets(line, sizeof(line), f_key))
+                break;
+        }
+
+        // parse
+        if (fgets(line, sizeof(line), f_key))
+        {
+            int idx = 0;
+            for (char *token = strtok(line, " \n"); token != NULL; token = strtok(NULL, " \n"))
+            {
+                if (idx < len)
+                    p[idx++] = atoi(token);
+            }
+        }
+
+        // The inverse of encrypted[i] = word[p[i]] is decrypted[p[i]] = word[i]
+        for (int i = 0; i < len; i++)
+        {
+            decrypted[p[i]] = word[i];
+        }
+        decrypted[len] = '\0';
+
+        // Write to output
+        fprintf(f_out, "%s", decrypted);
+
+        free(p);
+        free(decrypted);
+        exit(0);
+    }
+    else // Parent process
+    {
+        wait(NULL);
+    }
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2)
@@ -108,32 +166,36 @@ int main(int argc, char *argv[])
     int mode = (argc < 3); // 0 for decrypt mode, 1 for encrypt mode
 
     FILE *f_out_ptr = fopen("output_encrypted.txt", "w");
-    FILE *f_key_ptr = fopen(key_file, "w");
+    FILE *f_key_ptr = fopen(key_file, "rw");
     char word[1024];
-    if (mode == 1)
+    // encrypt
+    int i = 0;
+    int wordcount = 0;
+    while (i < s.st_size)
     {
-        int i = 0;
-        while (i < s.st_size)
+        // jump peste spatii goale
+        if (!isalpha(map[i]))
         {
-            // jump peste spatii goale
-            if (!isalpha(map[i]))
-            {
-                fputc(map[i], f_out_ptr);
-                i++;
-                continue;
-            }
-            // cream cuvantul
-            int j = 0;
-            while (i < s.st_size && isalpha(map[i]))
-            {
-                if (j < 1023)
-                    word[j++] = map[i];
-                i++;
-            }
-            word[j] = '\0'; // string done
-            StartChildEncryptor(word, f_out_ptr, f_key_ptr);
+            fputc(map[i], f_out_ptr);
+            i++;
+            continue;
         }
+        // cream cuvantul
+        int j = 0;
+        while (i < s.st_size && isalpha(map[i]))
+        {
+            if (j < 1023)
+                word[j++] = map[i];
+            i++;
+        }
+        word[j] = '\0'; // string done
+        wordcount++;
+        if (mode == 1)
+            StartChildEncryptor(word, f_out_ptr, f_key_ptr);
+        else
+            StartChildDecryptor(word, wordcount, f_out_ptr, f_key_ptr);
     }
+
     // printf("Input file: %s\n", input_file);
     // printf("Key file: %s\n", key_file);
     close(fd);
